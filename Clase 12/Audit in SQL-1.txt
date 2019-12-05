@@ -1,0 +1,98 @@
+--SQL Example:
+
+--Create audit in the server
+USE [master]
+
+GO
+
+CREATE SERVER AUDIT [TestAudit-20140428-161528]
+TO FILE 
+(	FILEPATH = N'L:\DB-Audit'
+	,MAXSIZE = 50 MB
+	,MAX_ROLLOVER_FILES = 2147483647
+	,RESERVE_DISK_SPACE = OFF
+)
+WITH
+(	QUEUE_DELAY = 1000
+	,ON_FAILURE = CONTINUE
+)
+
+GO
+--Enable
+ALTER SERVER AUDIT [TestAudit-20140428-161528]
+WITH (STATE = ON)
+
+--Create audit in DB
+CREATE DATABASE [TestAudit]
+GO
+USE [TestAudit]
+GO
+
+CREATE DATABASE AUDIT SPECIFICATION [TestAuditSpecification-20140428-162124]
+FOR SERVER AUDIT [TestAudit-20140428-161528]
+ADD (DATABASE_PERMISSION_CHANGE_GROUP),
+ADD (DATABASE_OBJECT_PERMISSION_CHANGE_GROUP),
+ADD (SCHEMA_OBJECT_CHANGE_GROUP)
+--WITH (STATE = OFF)
+WITH (STATE = ON)
+GO
+
+--Audit Test:
+DROP TABLE MyTable 
+
+CREATE TABLE MyTable ([Id] [int] NOT NULL)
+
+DROP PROCEDURE [Select-MyTable]
+
+CREATE PROCEDURE [Select-MyTable]
+as 
+Select * from MyTable
+
+--Test
+
+[Select-MyTable]
+
+Insert into MyTable values (1)
+Insert into MyTable values (2)
+
+ALTER PROCEDURE [Select-MyTable]
+as 
+Select id from MyTable
+
+USE [TestAudit]
+GO
+CREATE CLUSTERED INDEX [idx_clust] ON [dbo].[MyTable] 
+(
+	[Id] ASC
+)WITH (STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+GO
+
+USE [TestAudit]
+GO
+/****** Object:  Index [idx_clust]    Script Date: 09/04/2014 19:02:26 ******/
+DROP INDEX [idx_clust] ON [dbo].[MyTable] WITH ( ONLINE = OFF )
+GO
+
+
+--SELECT * FROM fn_get_audit_file('L:\db-Audit\*', default, default)
+SELECT 
+	session_server_principal_name, server_instance_name,database_name,
+	[object_name],[statement], event_time  
+	FROM fn_get_audit_file('L:\db-Audit\*', default, default)
+
+
+--More...
+CREATE DATABASE AUDIT SPECIFICATION PCI_Txn_Database_Spec
+FOR SERVER AUDIT PCI_Audit
+  ADD (DATABASE_OBJECT_PERMISSION_CHANGE_GROUP),
+  ADD (SELECT ON dbo.Customer BY dbo),
+  ADD (INSERT ON dbo.Customer BY dbo),
+  ADD (UPDATE ON dbo.Customer BY dbo),
+  ADD (DELETE ON dbo.Customer BY dbo),
+  ADD (EXECUTE ON dbo.usp_SubmitPO BY public)
+
+
+
+
+
+
